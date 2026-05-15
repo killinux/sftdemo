@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transformer 详解 - 交互式图解</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background:#0f172a; color:#e2e8f0; line-height:1.6; }
+.container { max-width:1100px; margin:0 auto; padding:20px; }
+h1 { text-align:center; font-size:28px; padding:30px 0 10px; background:linear-gradient(135deg,#60a5fa,#a78bfa); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.subtitle { text-align:center; color:#94a3b8; font-size:14px; margin-bottom:30px; }
+h2 { font-size:18px; color:#60a5fa; margin:28px 0 12px; padding-left:10px; border-left:3px solid #60a5fa; }
+h3 { font-size:15px; color:#a78bfa; margin:16px 0 8px; }
+p, li { font-size:14px; color:#cbd5e1; margin-bottom:6px; }
+ul { padding-left:20px; }
+code { background:#1e293b; color:#fbbf24; padding:1px 5px; border-radius:3px; font-size:13px; font-family:"Fira Code","SF Mono",monospace; }
+.card { background:#1e293b; border-radius:10px; padding:18px; margin:12px 0; border:1px solid #334155; }
+.card-title { font-size:14px; font-weight:bold; color:#fbbf24; margin-bottom:10px; }
+.diagram { background:#0f172a; border-radius:8px; padding:15px; margin:10px 0; overflow-x:auto; }
+.diagram svg { display:block; margin:0 auto; }
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+@media(max-width:700px) { .grid2,.grid3 { grid-template-columns:1fr; } }
+.tag { display:inline-block; padding:2px 8px; border-radius:4px; font-size:12px; font-weight:bold; margin:2px; }
+.tag-blue { background:#1e3a5f; color:#60a5fa; }
+.tag-purple { background:#2e1065; color:#a78bfa; }
+.tag-green { background:#14532d; color:#4ade80; }
+.tag-yellow { background:#422006; color:#fbbf24; }
+.tag-red { background:#450a0a; color:#f87171; }
+table { width:100%; border-collapse:collapse; font-size:13px; margin:8px 0; }
+th { background:#334155; color:#60a5fa; padding:6px 10px; text-align:left; }
+td { padding:6px 10px; border-bottom:1px solid #1e293b; }
+tr:hover td { background:#1e293b; }
+.formula { text-align:center; padding:12px; font-size:16px; color:#fbbf24; font-family:"Fira Code",monospace; background:#1a1a2e; border-radius:6px; margin:8px 0; letter-spacing:1px; }
+.step-num { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; background:#3b82f6; color:#fff; font-size:12px; font-weight:bold; margin-right:6px; flex-shrink:0; }
+.step { display:flex; align-items:flex-start; margin:6px 0; }
+.step-text { font-size:13px; }
+.attn-matrix { margin:10px auto; }
+.attn-matrix td { width:42px; height:32px; text-align:center; font-size:11px; font-family:monospace; border:1px solid #334155; cursor:pointer; transition:all .15s; }
+.attn-matrix th { width:42px; height:28px; text-align:center; font-size:12px; }
+.attn-matrix td:hover { transform:scale(1.15); box-shadow:0 0 8px rgba(96,165,250,0.5); }
+.highlight-row td { background:#1e3a5f !important; }
+.pipeline { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:4px; margin:10px 0; }
+.pipe-box { padding:6px 12px; border-radius:6px; font-size:12px; font-weight:bold; text-align:center; min-width:70px; }
+.pipe-arrow { color:#475569; font-size:18px; }
+.compare-bar { height:18px; border-radius:3px; margin:3px 0; transition:width 0.8s; }
+.tabs { display:flex; gap:4px; margin-bottom:12px; flex-wrap:wrap; }
+.tab { padding:6px 14px; border-radius:6px; font-size:13px; cursor:pointer; background:#1e293b; color:#94a3b8; border:1px solid #334155; transition:all .2s; }
+.tab.active { background:#3b82f6; color:#fff; border-color:#3b82f6; }
+.tab-content { display:none; }
+.tab-content.active { display:block; }
+.bit-diagram { display:flex; align-items:center; justify-content:center; gap:2px; margin:8px 0; }
+.bit { height:28px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:bold; color:#fff; border-radius:3px; }
+.anno { text-align:center; font-size:11px; color:#94a3b8; margin-top:2px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Transformer 详解</h1>
+<p class="subtitle">交互式图解 · 配合 transformer_demo.py 阅读 · 0.21M 参数手写实现</p>
+
+<!-- ==================== 全局流程 ==================== -->
+<h2>整体架构</h2>
+<div class="card">
+<div class="pipeline">
+  <div class="pipe-box" style="background:#1e3a5f;color:#60a5fa">输入文本<br><span style="font-size:11px">"天问一号"</span></div>
+  <span class="pipe-arrow">→</span>
+  <div class="pipe-box" style="background:#1a1a2e;color:#fbbf24">Tokenizer<br><span style="font-size:11px">字→整数ID</span></div>
+  <span class="pipe-arrow">→</span>
+  <div class="pipe-box" style="background:#14532d;color:#4ade80">Embedding<br><span style="font-size:11px">ID→向量</span></div>
+  <span class="pipe-arrow">→</span>
+  <div class="pipe-box" style="background:#2e1065;color:#c084fc">+ 位置编码</div>
+  <span class="pipe-arrow">→</span>
+  <div class="pipe-box" style="background:#7c2d12;color:#fb923c">Transformer<br>Block × N</div>
+  <span class="pipe-arrow">→</span>
+  <div class="pipe-box" style="background:#1e3a5f;color:#60a5fa">输出层<br><span style="font-size:11px">→概率分布</span></div>
+  <span class="pipe-arrow">→</span>
+  <div class="pipe-box" style="background:#14532d;color:#4ade80">下一个字<br><span style="font-size:11px">"成"</span></div>
+</div>
+<p style="text-align:center;font-size:12px;color:#64748b;margin-top:6px">每个 Block 内部 = Multi-Head Attention + Feed-Forward + 残差连接 + LayerNorm</p>
+</div>
+
+<!-- ==================== Transformer Block ==================== -->
+<h2>Transformer Block 内部结构</h2>
+<div class="card">
+<div class="diagram">
+<svg width="520" height="380" viewBox="0 0 520 380">
+  <!-- 输入 -->
+  <rect x="200" y="5" width="120" height="30" rx="6" fill="#1e3a5f" stroke="#3b82f6"/>
+  <text x="260" y="25" text-anchor="middle" fill="#60a5fa" font-size="13" font-weight="bold">输入 x</text>
+  <!-- 线 -->
+  <line x1="260" y1="35" x2="260" y2="55" stroke="#475569" stroke-width="2"/>
+  <!-- LayerNorm 1 -->
+  <rect x="200" y="55" width="120" height="28" rx="6" fill="#422006" stroke="#fbbf24"/>
+  <text x="260" y="74" text-anchor="middle" fill="#fbbf24" font-size="12">LayerNorm</text>
+  <line x1="260" y1="83" x2="260" y2="103" stroke="#475569" stroke-width="2"/>
+  <!-- Multi-Head Attention -->
+  <rect x="170" y="103" width="180" height="40" rx="8" fill="#2e1065" stroke="#a78bfa" stroke-width="2"/>
+  <text x="260" y="128" text-anchor="middle" fill="#c084fc" font-size="13" font-weight="bold">Multi-Head Attention</text>
+  <line x1="260" y1="143" x2="260" y2="163" stroke="#475569" stroke-width="2"/>
+  <!-- Add -->
+  <circle cx="260" cy="173" r="14" fill="#14532d" stroke="#4ade80"/>
+  <text x="260" y="178" text-anchor="middle" fill="#4ade80" font-size="16" font-weight="bold">+</text>
+  <!-- 残差连接线 1 -->
+  <path d="M320,20 L420,20 L420,173 L274,173" fill="none" stroke="#4ade80" stroke-width="1.5" stroke-dasharray="4"/>
+  <text x="430" y="95" fill="#4ade80" font-size="11" transform="rotate(90,430,95)">残差连接</text>
+  <line x1="260" y1="187" x2="260" y2="207" stroke="#475569" stroke-width="2"/>
+  <!-- LayerNorm 2 -->
+  <rect x="200" y="207" width="120" height="28" rx="6" fill="#422006" stroke="#fbbf24"/>
+  <text x="260" y="226" text-anchor="middle" fill="#fbbf24" font-size="12">LayerNorm</text>
+  <line x1="260" y1="235" x2="260" y2="255" stroke="#475569" stroke-width="2"/>
+  <!-- FFN -->
+  <rect x="170" y="255" width="180" height="40" rx="8" fill="#7c2d12" stroke="#fb923c" stroke-width="2"/>
+  <text x="260" y="280" text-anchor="middle" fill="#fb923c" font-size="13" font-weight="bold">Feed-Forward Network</text>
+  <line x1="260" y1="295" x2="260" y2="315" stroke="#475569" stroke-width="2"/>
+  <!-- Add 2 -->
+  <circle cx="260" cy="325" r="14" fill="#14532d" stroke="#4ade80"/>
+  <text x="260" y="330" text-anchor="middle" fill="#4ade80" font-size="16" font-weight="bold">+</text>
+  <!-- 残差连接线 2 -->
+  <path d="M320,173 L460,173 L460,325 L274,325" fill="none" stroke="#4ade80" stroke-width="1.5" stroke-dasharray="4"/>
+  <line x1="260" y1="339" x2="260" y2="359" stroke="#475569" stroke-width="2"/>
+  <!-- 输出 -->
+  <rect x="200" y="350" width="120" height="30" rx="6" fill="#1e3a5f" stroke="#3b82f6"/>
+  <text x="260" y="370" text-anchor="middle" fill="#60a5fa" font-size="13" font-weight="bold">输出</text>
+  <!-- Q K V 标注 -->
+  <text x="130" y="118" fill="#94a3b8" font-size="11">Q</text>
+  <text x="130" y="130" fill="#94a3b8" font-size="11">K</text>
+  <text x="130" y="142" fill="#94a3b8" font-size="11">V</text>
+  <line x1="145" y1="123" x2="170" y2="123" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr)"/>
+  <defs><marker id="arr" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6" fill="#94a3b8"/></marker></defs>
+  <!-- FFN 内部标注 -->
+  <text x="100" y="268" fill="#94a3b8" font-size="10">d→4d</text>
+  <text x="100" y="280" fill="#94a3b8" font-size="10">ReLU</text>
+  <text x="100" y="292" fill="#94a3b8" font-size="10">4d→d</text>
+  <line x1="125" y1="275" x2="170" y2="275" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr)"/>
+</svg>
+</div>
+<p style="font-size:12px;color:#94a3b8;text-align:center">demo 中堆叠 4 个这样的 Block · Qwen2.5-0.5B 堆 24 个 · GPT-4 堆 ~120 个</p>
+</div>
+
+<!-- ==================== Self-Attention ==================== -->
+<h2>Self-Attention：Transformer 的灵魂</h2>
+<div class="card">
+<div class="card-title">核心公式</div>
+<div class="formula">Attention(Q, K, V) = softmax( Q · K<sup>T</sup> / √d<sub>k</sub> ) · V</div>
+
+<div class="grid3" style="margin-top:14px">
+  <div class="card" style="margin:0;background:#0f172a">
+    <div style="text-align:center"><span class="tag tag-blue">Q (Query)</span></div>
+    <p style="font-size:12px;text-align:center;margin-top:6px">"我在找什么？"</p>
+    <p style="font-size:11px;color:#64748b;text-align:center">通过 W<sub>q</sub> 线性变换得到</p>
+  </div>
+  <div class="card" style="margin:0;background:#0f172a">
+    <div style="text-align:center"><span class="tag tag-green">K (Key)</span></div>
+    <p style="font-size:12px;text-align:center;margin-top:6px">"我有什么特征？"</p>
+    <p style="font-size:11px;color:#64748b;text-align:center">通过 W<sub>k</sub> 线性变换得到</p>
+  </div>
+  <div class="card" style="margin:0;background:#0f172a">
+    <div style="text-align:center"><span class="tag tag-purple">V (Value)</span></div>
+    <p style="font-size:12px;text-align:center;margin-top:6px">"我的实际内容"</p>
+    <p style="font-size:11px;color:#64748b;text-align:center">通过 W<sub>v</sub> 线性变换得到</p>
+  </div>
+</div>
+
+<h3 style="margin-top:16px">计算过程：以 "号" 字为例</h3>
+<div class="diagram">
+<svg width="500" height="220" viewBox="0 0 500 220">
+  <!-- 步骤1: Q·K点积 -->
+  <text x="10" y="18" fill="#60a5fa" font-size="12" font-weight="bold">① Q·K 点积</text>
+  <g transform="translate(10,28)">
+    <rect x="0" y="0" width="55" height="22" rx="4" fill="#1e3a5f"/><text x="28" y="15" text-anchor="middle" fill="#60a5fa" font-size="11">Q<tspan font-size="9" baseline-shift="sub">号</tspan></text>
+    <text x="62" y="15" fill="#94a3b8" font-size="12">·</text>
+    <rect x="70" y="0" width="55" height="22" rx="4" fill="#14532d"/><text x="98" y="15" text-anchor="middle" fill="#4ade80" font-size="11">K<tspan font-size="9" baseline-shift="sub">天</tspan></text>
+    <text x="132" y="15" fill="#94a3b8" font-size="11">= 3.2</text>
+  </g>
+  <g transform="translate(10,54)">
+    <rect x="0" y="0" width="55" height="22" rx="4" fill="#1e3a5f"/><text x="28" y="15" text-anchor="middle" fill="#60a5fa" font-size="11">Q<tspan font-size="9" baseline-shift="sub">号</tspan></text>
+    <text x="62" y="15" fill="#94a3b8" font-size="12">·</text>
+    <rect x="70" y="0" width="55" height="22" rx="4" fill="#14532d"/><text x="98" y="15" text-anchor="middle" fill="#4ade80" font-size="11">K<tspan font-size="9" baseline-shift="sub">问</tspan></text>
+    <text x="132" y="15" fill="#94a3b8" font-size="11">= 0.1</text>
+  </g>
+  <g transform="translate(10,80)">
+    <rect x="0" y="0" width="55" height="22" rx="4" fill="#1e3a5f"/><text x="28" y="15" text-anchor="middle" fill="#60a5fa" font-size="11">Q<tspan font-size="9" baseline-shift="sub">号</tspan></text>
+    <text x="62" y="15" fill="#94a3b8" font-size="12">·</text>
+    <rect x="70" y="0" width="55" height="22" rx="4" fill="#14532d"/><text x="98" y="15" text-anchor="middle" fill="#4ade80" font-size="11">K<tspan font-size="9" baseline-shift="sub">一</tspan></text>
+    <text x="132" y="15" fill="#94a3b8" font-size="11">= 0.5</text>
+  </g>
+  <g transform="translate(10,106)">
+    <rect x="0" y="0" width="55" height="22" rx="4" fill="#1e3a5f"/><text x="28" y="15" text-anchor="middle" fill="#60a5fa" font-size="11">Q<tspan font-size="9" baseline-shift="sub">号</tspan></text>
+    <text x="62" y="15" fill="#94a3b8" font-size="12">·</text>
+    <rect x="70" y="0" width="55" height="22" rx="4" fill="#14532d"/><text x="98" y="15" text-anchor="middle" fill="#4ade80" font-size="11">K<tspan font-size="9" baseline-shift="sub">号</tspan></text>
+    <text x="132" y="15" fill="#94a3b8" font-size="11">= 1.8</text>
+  </g>
+
+  <!-- 步骤2: 缩放+softmax -->
+  <text x="200" y="18" fill="#fbbf24" font-size="12" font-weight="bold">② ÷√d → softmax</text>
+  <g transform="translate(200,28)">
+    <text x="0" y="15" fill="#94a3b8" font-size="11">[3.2, 0.1, 0.5, 1.8]</text>
+    <text x="0" y="38" fill="#64748b" font-size="11">÷ √64 = ÷ 8</text>
+    <text x="0" y="61" fill="#94a3b8" font-size="11">[0.40, 0.01, 0.06, 0.23]</text>
+    <text x="0" y="84" fill="#64748b" font-size="11">softmax ↓</text>
+    <rect x="0" y="92" width="160" height="24" rx="4" fill="#422006"/>
+    <text x="80" y="108" text-anchor="middle" fill="#fbbf24" font-size="12" font-weight="bold">0.88  0.00  0.02  0.10</text>
+  </g>
+
+  <!-- 步骤3: 加权求和V -->
+  <text x="380" y="18" fill="#a78bfa" font-size="12" font-weight="bold">③ 加权求和 V</text>
+  <g transform="translate(380,30)">
+    <text x="0" y="14" fill="#f87171" font-size="12" font-weight="bold">0.88</text><text x="32" y="14" fill="#94a3b8" font-size="11">× V<tspan font-size="9" baseline-shift="sub">天</tspan></text>
+    <text x="0" y="38" fill="#94a3b8" font-size="12">0.00</text><text x="32" y="38" fill="#94a3b8" font-size="11">× V<tspan font-size="9" baseline-shift="sub">问</tspan></text>
+    <text x="0" y="62" fill="#94a3b8" font-size="12">0.02</text><text x="32" y="62" fill="#94a3b8" font-size="11">× V<tspan font-size="9" baseline-shift="sub">一</tspan></text>
+    <text x="0" y="86" fill="#94a3b8" font-size="12">0.10</text><text x="32" y="86" fill="#94a3b8" font-size="11">× V<tspan font-size="9" baseline-shift="sub">号</tspan></text>
+    <line x1="0" y1="95" x2="90" y2="95" stroke="#475569"/>
+    <text x="0" y="112" fill="#c084fc" font-size="12" font-weight="bold">= 输出向量</text>
+  </g>
+
+  <!-- 结论 -->
+  <rect x="10" y="150" width="480" height="55" rx="8" fill="#14532d" stroke="#4ade80" stroke-dasharray="4"/>
+  <text x="250" y="172" text-anchor="middle" fill="#4ade80" font-size="13" font-weight="bold">"号" 最关注 "天"（权重 0.88）</text>
+  <text x="250" y="194" text-anchor="middle" fill="#86efac" font-size="12">模型学会了 "天问一号" 是一个整体 → "号" 要回头看 "天" 来理解语义</text>
+</svg>
+</div>
+</div>
+
+<!-- ==================== Multi-Head ==================== -->
+<h2>Multi-Head Attention：多角度关注</h2>
+<div class="card">
+<div class="diagram">
+<svg width="480" height="180" viewBox="0 0 480 180">
+  <text x="240" y="18" text-anchor="middle" fill="#94a3b8" font-size="12">d_model=64 拆成 4 个头，每个头处理 16 维</text>
+  <!-- 输入 -->
+  <rect x="185" y="30" width="110" height="26" rx="5" fill="#1e3a5f" stroke="#3b82f6"/>
+  <text x="240" y="48" text-anchor="middle" fill="#60a5fa" font-size="12">输入 (64维)</text>
+  <!-- 分叉线 -->
+  <line x1="240" y1="56" x2="60" y2="80" stroke="#475569"/>
+  <line x1="240" y1="56" x2="180" y2="80" stroke="#475569"/>
+  <line x1="240" y1="56" x2="300" y2="80" stroke="#475569"/>
+  <line x1="240" y1="56" x2="420" y2="80" stroke="#475569"/>
+  <!-- 4个头 -->
+  <rect x="15" y="80" width="90" height="36" rx="5" fill="#2e1065" stroke="#a78bfa"/><text x="60" y="95" text-anchor="middle" fill="#c084fc" font-size="11" font-weight="bold">Head 1</text><text x="60" y="109" text-anchor="middle" fill="#94a3b8" font-size="10">16维·语法</text>
+  <rect x="135" y="80" width="90" height="36" rx="5" fill="#2e1065" stroke="#a78bfa"/><text x="180" y="95" text-anchor="middle" fill="#c084fc" font-size="11" font-weight="bold">Head 2</text><text x="180" y="109" text-anchor="middle" fill="#94a3b8" font-size="10">16维·语义</text>
+  <rect x="255" y="80" width="90" height="36" rx="5" fill="#2e1065" stroke="#a78bfa"/><text x="300" y="95" text-anchor="middle" fill="#c084fc" font-size="11" font-weight="bold">Head 3</text><text x="300" y="109" text-anchor="middle" fill="#94a3b8" font-size="10">16维·结构</text>
+  <rect x="375" y="80" width="90" height="36" rx="5" fill="#2e1065" stroke="#a78bfa"/><text x="420" y="95" text-anchor="middle" fill="#c084fc" font-size="11" font-weight="bold">Head 4</text><text x="420" y="109" text-anchor="middle" fill="#94a3b8" font-size="10">16维·依赖</text>
+  <!-- 汇合线 -->
+  <line x1="60" y1="116" x2="240" y2="140" stroke="#475569"/>
+  <line x1="180" y1="116" x2="240" y2="140" stroke="#475569"/>
+  <line x1="300" y1="116" x2="240" y2="140" stroke="#475569"/>
+  <line x1="420" y1="116" x2="240" y2="140" stroke="#475569"/>
+  <!-- concat + Linear -->
+  <rect x="165" y="140" width="150" height="26" rx="5" fill="#7c2d12" stroke="#fb923c"/>
+  <text x="240" y="158" text-anchor="middle" fill="#fb923c" font-size="12">Concat → W<tspan font-size="9" baseline-shift="sub">o</tspan> → 64维</text>
+</svg>
+</div>
+<p style="font-size:12px;color:#94a3b8">每个头独立做 Attention，关注不同的模式。拼接后通过线性层融合回 d_model 维。</p>
+</div>
+
+<!-- ==================== Causal Mask ==================== -->
+<h2>Causal Mask：不能偷看未来</h2>
+<div class="card">
+<div class="grid2">
+  <div>
+    <div class="card-title">Mask 矩阵（下三角）</div>
+    <div class="diagram" style="padding:8px">
+<svg width="200" height="200" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="gMask" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#14532d"/><stop offset="100%" stop-color="#1e3a5f"/></linearGradient>
+  </defs>
+  <!-- 标签 -->
+  <text x="60" y="14" fill="#94a3b8" font-size="10">天</text><text x="94" y="14" fill="#94a3b8" font-size="10">问</text><text x="128" y="14" fill="#94a3b8" font-size="10">一</text><text x="162" y="14" fill="#94a3b8" font-size="10">号</text>
+  <text x="25" y="48" fill="#94a3b8" font-size="10" text-anchor="middle">天</text><text x="25" y="82" fill="#94a3b8" font-size="10" text-anchor="middle">问</text><text x="25" y="116" fill="#94a3b8" font-size="10" text-anchor="middle">一</text><text x="25" y="150" fill="#94a3b8" font-size="10" text-anchor="middle">号</text>
+  <!-- 可见 (绿) -->
+  <rect x="45" y="25" width="30" height="30" rx="3" fill="#14532d" stroke="#4ade80"/><text x="60" y="44" text-anchor="middle" fill="#4ade80" font-size="12">✓</text>
+  <rect x="45" y="59" width="30" height="30" rx="3" fill="#14532d" stroke="#4ade80"/><text x="60" y="78" text-anchor="middle" fill="#4ade80" font-size="12">✓</text>
+  <rect x="79" y="59" width="30" height="30" rx="3" fill="#14532d" stroke="#4ade80"/><text x="94" y="78" text-anchor="middle" fill="#4ade80" font-size="12">✓</text>
+  <rect x="45" y="93" width="30" height="30" rx="3" fill="#14532d" stroke="#4ade80"/><text x="60" y="112" text-anchor="middle" fill="#4ade80" font-size="12">✓</text>
+  <rect x="79" y="93" width="30" height="30" rx="3" fill="#14532d" stroke="#4ade80"/><text x="94" y="112" text-anchor="middle" fill="#4ade80" font-size="12">✓</text>
+  <rect x="113" y="93" width="30" height="30" rx="3" fill="#14532d" stroke="#4ade80"/><text x="128" y="112" text-anchor="middle" fill="#4ade80" font-size="12">✓</text>
+  <rect x="45" y="127" width="30" height="30" rx="3" fill="#14532d" stroke="#4ade80"/><text x="60" y="146" text-anchor="middle" fill="#4ade80" font-size="12">✓</text>
+  <rect x="79" y="127" width="30" height="30" rx="3" fill="#14532d" stroke="#4ade80"/><text x="94" y="146" text-anchor="middle" fill="#4ade80" font-size="12">✓</text>
+  <rect x="113" y="127" width="30" height="30" rx="3" fill="#14532d" stroke="#4ade80"/><text x="128" y="146" text-anchor="middle" fill="#4ade80" font-size="12">✓</text>
+  <rect x="147" y="127" width="30" height="30" rx="3" fill="#14532d" stroke="#4ade80"/><text x="162" y="146" text-anchor="middle" fill="#4ade80" font-size="12">✓</text>
+  <!-- 不可见 (红) -->
+  <rect x="79" y="25" width="30" height="30" rx="3" fill="#450a0a" stroke="#7f1d1d"/><text x="94" y="44" text-anchor="middle" fill="#f87171" font-size="12">✗</text>
+  <rect x="113" y="25" width="30" height="30" rx="3" fill="#450a0a" stroke="#7f1d1d"/><text x="128" y="44" text-anchor="middle" fill="#f87171" font-size="12">✗</text>
+  <rect x="147" y="25" width="30" height="30" rx="3" fill="#450a0a" stroke="#7f1d1d"/><text x="162" y="44" text-anchor="middle" fill="#f87171" font-size="12">✗</text>
+  <rect x="113" y="59" width="30" height="30" rx="3" fill="#450a0a" stroke="#7f1d1d"/><text x="128" y="78" text-anchor="middle" fill="#f87171" font-size="12">✗</text>
+  <rect x="147" y="59" width="30" height="30" rx="3" fill="#450a0a" stroke="#7f1d1d"/><text x="162" y="78" text-anchor="middle" fill="#f87171" font-size="12">✗</text>
+  <rect x="147" y="93" width="30" height="30" rx="3" fill="#450a0a" stroke="#7f1d1d"/><text x="162" y="112" text-anchor="middle" fill="#f87171" font-size="12">✗</text>
+  <!-- 图例 -->
+  <rect x="45" y="172" width="14" height="14" rx="2" fill="#14532d" stroke="#4ade80"/>
+  <text x="64" y="184" fill="#94a3b8" font-size="10">可以看到</text>
+  <rect x="115" y="172" width="14" height="14" rx="2" fill="#450a0a" stroke="#7f1d1d"/>
+  <text x="134" y="184" fill="#94a3b8" font-size="10">被遮蔽 (-∞)</text>
+</svg>
+    </div>
+  </div>
+  <div>
+    <div class="card-title">每个位置能看到的范围</div>
+    <div class="step"><span class="step-num">1</span><span class="step-text">处理 <code>天</code> 时：只看 [天] → 预测 "问"</span></div>
+    <div class="step"><span class="step-num">2</span><span class="step-text">处理 <code>问</code> 时：看 [天, 问] → 预测 "一"</span></div>
+    <div class="step"><span class="step-num">3</span><span class="step-text">处理 <code>一</code> 时：看 [天, 问, 一] → 预测 "号"</span></div>
+    <div class="step"><span class="step-num">4</span><span class="step-text">处理 <code>号</code> 时：看 [天, 问, 一, 号] → 预测 "成"</span></div>
+    <p style="margin-top:14px;font-size:12px;color:#94a3b8">实现方式：在 attention score 矩阵的右上角填 <code>-∞</code>，经过 softmax 后变成 0，等于完全看不到。</p>
+    <p style="font-size:12px;color:#94a3b8;margin-top:8px">这就是注意力可视化中右上角全是 <code>0.00</code> 的原因。</p>
+    <div style="margin-top:10px;padding:8px;background:#1a1a2e;border-radius:6px;font-family:monospace;font-size:12px;color:#fbbf24">mask = torch.tril(torch.ones(seq_len, seq_len))</div>
+  </div>
+</div>
+</div>
+
+<!-- ==================== 注意力可视化 ==================== -->
+<h2>注意力权重可视化（交互）</h2>
+<div class="card">
+<p style="font-size:12px;color:#94a3b8;margin-bottom:8px">点击任意格子查看该字的关注分布。数据来自 demo 实际运行结果（第1层第1个头）。</p>
+<div style="overflow-x:auto">
+<table class="attn-matrix" id="attnTable">
+<thead><tr><th></th><th>天</th><th>问</th><th>一</th><th>号</th><th>成</th><th>功</th><th>着</th><th>陆</th><th>火</th><th>星</th></tr></thead>
+<tbody></tbody>
+</table>
+</div>
+<div id="attnInfo" style="margin-top:8px;font-size:13px;color:#94a3b8;min-height:20px"></div>
+</div>
+
+<script>
+const chars = ['天','问','一','号','成','功','着','陆','火','星'];
+const attnData = [
+  [1.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00],
+  [0.84,0.16,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00],
+  [0.52,0.07,0.42,0.00,0.00,0.00,0.00,0.00,0.00,0.00],
+  [0.88,0.00,0.02,0.10,0.00,0.00,0.00,0.00,0.00,0.00],
+  [0.33,0.01,0.09,0.49,0.09,0.00,0.00,0.00,0.00,0.00],
+  [0.00,1.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00],
+  [0.02,0.53,0.06,0.01,0.04,0.05,0.29,0.00,0.00,0.00],
+  [0.05,0.55,0.11,0.03,0.01,0.16,0.05,0.03,0.00,0.00],
+  [0.01,0.02,0.00,0.00,0.02,0.01,0.01,0.93,0.00,0.00],
+  [0.16,0.01,0.02,0.01,0.01,0.03,0.00,0.75,0.00,0.01]
+];
+const tbody = document.querySelector('#attnTable tbody');
+attnData.forEach((row, i) => {
+  const tr = document.createElement('tr');
+  const th = document.createElement('th');
+  th.textContent = chars[i];
+  tr.appendChild(th);
+  row.forEach((v, j) => {
+    const td = document.createElement('td');
+    td.textContent = v.toFixed(2);
+    if (j > i) { td.style.background = '#1a0a0a'; td.style.color = '#7f1d1d'; }
+    else {
+      const intensity = Math.round(v * 200);
+      td.style.background = `rgba(96,165,250,${v * 0.8})`;
+      td.style.color = v > 0.5 ? '#fff' : '#94a3b8';
+      if (v >= 0.8) td.style.fontWeight = 'bold';
+    }
+    td.onclick = () => highlightRow(i);
+    tr.appendChild(td);
+  });
+  tbody.appendChild(tr);
+});
+function highlightRow(i) {
+  document.querySelectorAll('#attnTable tr').forEach(r => r.classList.remove('highlight-row'));
+  tbody.children[i].classList.add('highlight-row');
+  const row = attnData[i];
+  const maxJ = row.indexOf(Math.max(...row));
+  const info = document.getElementById('attnInfo');
+  info.innerHTML = `<span style="color:#60a5fa;font-weight:bold">"${chars[i]}"</span> 最关注 <span style="color:#fbbf24;font-weight:bold">"${chars[maxJ]}"</span>（权重 ${row[maxJ].toFixed(2)}）`;
+  if (i === 3) info.innerHTML += ' — "天问一号"是整体，"号"回头看"天"';
+  if (i === 8) info.innerHTML += ' — 着"陆"→"火"星，"陆"提示了地点';
+  if (i === 9) info.innerHTML += ' — 同理，"陆"对理解"火星"很重要';
+}
+</script>
+
+<!-- ==================== 位置编码 ==================== -->
+<h2>Positional Encoding：位置信息</h2>
+<div class="card">
+<div class="grid2">
+  <div>
+    <div class="card-title">为什么需要？</div>
+    <p>Transformer 一次看到所有字，没有顺序概念：</p>
+    <p style="text-align:center;margin:8px 0"><code>"我爱你"</code> 和 <code>"你爱我"</code><br><span style="font-size:12px;color:#f87171">→ 不加位置编码，对模型完全一样！</span></p>
+    <p>用 sin/cos 生成固定编码，每个位置唯一：</p>
+    <div class="formula" style="font-size:13px;padding:8px">PE(pos, 2i) = sin(pos / 10000<sup>2i/d</sup>)<br>PE(pos, 2i+1) = cos(pos / 10000<sup>2i/d</sup>)</div>
+  </div>
+  <div>
+    <div class="card-title">可视化</div>
+    <canvas id="peCanvas" width="300" height="160" style="width:100%;border-radius:6px;background:#0f172a"></canvas>
+    <p style="font-size:11px;color:#64748b;text-align:center;margin-top:4px">X轴=维度，Y轴=位置，颜色=编码值</p>
+  </div>
+</div>
+</div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('peCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const d = 64, maxPos = 32;
+  const cellW = W / d, cellH = H / maxPos;
+  for (let pos = 0; pos < maxPos; pos++) {
+    for (let i = 0; i < d; i++) {
+      const div = Math.pow(10000, Math.floor(i/2)*2/d);
+      const val = i % 2 === 0 ? Math.sin(pos / div) : Math.cos(pos / div);
+      const norm = (val + 1) / 2;
+      const r = Math.round(norm * 96 + (1-norm)*15);
+      const g = Math.round(norm * 165 + (1-norm)*23);
+      const b = Math.round(norm * 250 + (1-norm)*42);
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fillRect(i * cellW, pos * cellH, cellW + 0.5, cellH + 0.5);
+    }
+  }
+})();
+</script>
+
+<!-- ==================== FFN ==================== -->
+<h2>Feed-Forward Network</h2>
+<div class="card">
+<div class="pipeline">
+  <div class="pipe-box" style="background:#1e3a5f;color:#60a5fa">输入<br><span style="font-size:11px">64维</span></div>
+  <span class="pipe-arrow">→</span>
+  <div class="pipe-box" style="background:#7c2d12;color:#fb923c">Linear<br><span style="font-size:11px">64→256</span></div>
+  <span class="pipe-arrow">→</span>
+  <div class="pipe-box" style="background:#422006;color:#fbbf24">ReLU<br><span style="font-size:11px">非线性</span></div>
+  <span class="pipe-arrow">→</span>
+  <div class="pipe-box" style="background:#7c2d12;color:#fb923c">Linear<br><span style="font-size:11px">256→64</span></div>
+  <span class="pipe-arrow">→</span>
+  <div class="pipe-box" style="background:#1e3a5f;color:#60a5fa">输出<br><span style="font-size:11px">64维</span></div>
+</div>
+<p style="font-size:12px;color:#94a3b8;margin-top:6px">Attention 负责"看其他位置"，FFN 负责"消化信息"。先升维到 4 倍空间做非线性变换，再降回来。</p>
+</div>
+
+<!-- ==================== 数据精度 ==================== -->
+<h2>浮点数精度：FP32 / FP16 / BF16</h2>
+<div class="card">
+<div class="card-title">位数分配对比</div>
+<div style="margin:12px 0">
+  <p style="font-size:12px;color:#94a3b8;margin-bottom:4px"><strong>FP32</strong> — Float 32-bit（标准精度）</p>
+  <div class="bit-diagram">
+    <div class="bit" style="width:30px;background:#f87171">1</div>
+    <div class="bit" style="width:120px;background:#60a5fa">8 位指数</div>
+    <div class="bit" style="width:280px;background:#4ade80">23 位尾数</div>
+  </div>
+  <div class="bit-diagram" style="margin-top:0"><div class="anno" style="width:30px">符号</div><div class="anno" style="width:120px">范围大</div><div class="anno" style="width:280px">精度高</div></div>
+</div>
+<div style="margin:12px 0">
+  <p style="font-size:12px;color:#94a3b8;margin-bottom:4px"><strong>FP16</strong> — Float 16-bit（半精度）</p>
+  <div class="bit-diagram">
+    <div class="bit" style="width:30px;background:#f87171">1</div>
+    <div class="bit" style="width:75px;background:#60a5fa">5 位</div>
+    <div class="bit" style="width:150px;background:#4ade80">10 位</div>
+  </div>
+  <div class="bit-diagram" style="margin-top:0"><div class="anno" style="width:30px">符号</div><div class="anno" style="width:75px;color:#f87171">范围小!</div><div class="anno" style="width:150px">精度中</div></div>
+</div>
+<div style="margin:12px 0">
+  <p style="font-size:12px;color:#94a3b8;margin-bottom:4px"><strong>BF16</strong> — Brain Float 16-bit（Google Brain 发明，训练首选）</p>
+  <div class="bit-diagram">
+    <div class="bit" style="width:30px;background:#f87171">1</div>
+    <div class="bit" style="width:120px;background:#60a5fa">8 位指数</div>
+    <div class="bit" style="width:105px;background:#4ade80">7 位</div>
+  </div>
+  <div class="bit-diagram" style="margin-top:0"><div class="anno" style="width:30px">符号</div><div class="anno" style="width:120px;color:#60a5fa">范围=FP32 ✓</div><div class="anno" style="width:105px">精度低</div></div>
+</div>
+<table style="margin-top:10px">
+<tr><th></th><th>显存</th><th>范围</th><th>精度</th><th>训练推荐</th></tr>
+<tr><td><span class="tag tag-yellow">FP32</span></td><td>4 字节/参数</td><td>大</td><td>高</td><td>太占显存</td></tr>
+<tr><td><span class="tag tag-red">FP16</span></td><td>2 字节/参数</td><td><span style="color:#f87171">小（易溢出）</span></td><td>中</td><td>需 loss scaling</td></tr>
+<tr><td><span class="tag tag-green">BF16</span></td><td>2 字节/参数</td><td>大</td><td>够用</td><td><strong style="color:#4ade80">✓ 首选</strong></td></tr>
+</table>
+</div>
+
+<!-- ==================== 训练过程 ==================== -->
+<h2>训练过程</h2>
+<div class="card">
+<div class="card-title">Loss 曲线</div>
+<canvas id="lossChart" width="500" height="200" style="width:100%;border-radius:6px;background:#0f172a"></canvas>
+<div class="grid2" style="margin-top:12px">
+  <div>
+    <h3>每步做三件事</h3>
+    <div class="step"><span class="step-num">1</span><span class="step-text"><strong>前向传播</strong>：输入 → 模型 → 预测概率</span></div>
+    <div class="step"><span class="step-num">2</span><span class="step-text"><strong>算 Loss</strong>：和正确答案比，计算交叉熵</span></div>
+    <div class="step"><span class="step-num">3</span><span class="step-text"><strong>反向传播</strong>：计算梯度 → 更新参数</span></div>
+  </div>
+  <div>
+    <h3>Loss 直觉</h3>
+    <table>
+      <tr><td>Loss = 3.99</td><td>≈ 随机猜（1/54）</td></tr>
+      <tr><td>Loss = 3.43</td><td>比瞎猜好一点</td></tr>
+      <tr><td>Loss = 0.82</td><td>44% 置信度</td></tr>
+      <tr><td>Loss = 0.10</td><td><span style="color:#4ade80">90% 置信度</span></td></tr>
+    </table>
+    <p style="font-size:11px;color:#64748b;margin-top:4px">Loss = -log(P)，P 是对正确答案的预测概率</p>
+  </div>
+</div>
+</div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('lossChart');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const pad = {l:45,r:15,t:15,b:30};
+  const data = [[10,3.43],[20,2.58],[30,1.86],[40,1.26],[50,0.82],[60,0.54],[70,0.35],[80,0.23],[90,0.15],[100,0.10]];
+  const maxL = 4;
+  ctx.strokeStyle = '#334155'; ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.t + (H - pad.t - pad.b) * (i / 4);
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+    ctx.fillStyle = '#64748b'; ctx.font = '11px monospace'; ctx.textAlign = 'right';
+    ctx.fillText((maxL - i).toFixed(0), pad.l - 6, y + 4);
+  }
+  for (let i = 0; i < data.length; i++) {
+    const x = pad.l + (data[i][0] / 100) * (W - pad.l - pad.r);
+    ctx.fillStyle = '#64748b'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(data[i][0], x, H - 8);
+  }
+  ctx.fillText('Epoch', W / 2, H - 0);
+  // 随机猜的线
+  const randomY = pad.t + (H - pad.t - pad.b) * (1 - 3.99 / maxL);
+  ctx.strokeStyle = '#7f1d1d'; ctx.setLineDash([4,4]); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad.l, randomY); ctx.lineTo(W - pad.r, randomY); ctx.stroke();
+  ctx.fillStyle = '#f87171'; ctx.font = '10px sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText('随机猜 3.99', W - pad.r - 65, randomY - 4);
+  ctx.setLineDash([]);
+  // Loss 曲线
+  ctx.beginPath();
+  ctx.strokeStyle = '#60a5fa'; ctx.lineWidth = 2.5;
+  data.forEach(([ep, loss], i) => {
+    const x = pad.l + (ep / 100) * (W - pad.l - pad.r);
+    const y = pad.t + (H - pad.t - pad.b) * (1 - loss / maxL);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  // 点
+  data.forEach(([ep, loss]) => {
+    const x = pad.l + (ep / 100) * (W - pad.l - pad.r);
+    const y = pad.t + (H - pad.t - pad.b) * (1 - loss / maxL);
+    ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#60a5fa'; ctx.fill();
+    ctx.fillStyle = '#94a3b8'; ctx.font = '10px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(loss.toFixed(2), x, y - 8);
+  });
+})();
+</script>
+
+<!-- ==================== 生成过程 ==================== -->
+<h2>自回归生成</h2>
+<div class="card">
+<div class="card-title">一个字一个字往后写（所有大模型都是这样）</div>
+<div id="genDemo" style="margin:10px 0"></div>
+<button onclick="runGenDemo()" style="padding:6px 16px;border:none;border-radius:6px;background:#3b82f6;color:#fff;cursor:pointer;font-size:13px;margin-top:8px">▶ 播放生成过程</button>
+</div>
+
+<script>
+const genSteps = [
+  {input:'天问', predict:'一', prob:'0.85'},
+  {input:'天问一', predict:'号', prob:'0.91'},
+  {input:'天问一号', predict:'成', prob:'0.82'},
+  {input:'天问一号成', predict:'功', prob:'0.88'},
+  {input:'天问一号成功', predict:'着', prob:'0.79'},
+  {input:'天问一号成功着', predict:'陆', prob:'0.93'},
+  {input:'天问一号成功着陆', predict:'火', prob:'0.86'},
+  {input:'天问一号成功着陆火', predict:'星', prob:'0.90'},
+  {input:'天问一号成功着陆火星', predict:'。', prob:'0.95'},
+];
+function runGenDemo() {
+  const el = document.getElementById('genDemo');
+  el.innerHTML = '';
+  genSteps.forEach((s, i) => {
+    setTimeout(() => {
+      const div = document.createElement('div');
+      div.style.cssText = 'display:flex;align-items:center;gap:8px;margin:4px 0;opacity:0;transition:opacity 0.3s';
+      div.innerHTML = `<span class="step-num">${i+1}</span><span style="font-size:13px;color:#94a3b8">输入 <code>${s.input}</code> → 预测 <span style="color:#fbbf24;font-weight:bold">"${s.predict}"</span> <span style="color:#64748b;font-size:11px">(P=${s.prob})</span></span>`;
+      el.appendChild(div);
+      requestAnimationFrame(() => div.style.opacity = '1');
+    }, i * 400);
+  });
+}
+</script>
+
+<!-- ==================== 规模对比 ==================== -->
+<h2>规模对比</h2>
+<div class="card">
+<table>
+<tr><th></th><th>Demo</th><th>Qwen2.5-0.5B</th><th>GPT-4</th></tr>
+<tr><td>参数量</td><td>0.21M</td><td>500M</td><td>~1,800,000M</td></tr>
+<tr><td>层数</td><td>4</td><td>24</td><td>~120</td></tr>
+<tr><td>注意力头</td><td>4</td><td>14</td><td>~96</td></tr>
+<tr><td>隐藏维度</td><td>64</td><td>896</td><td>~12,288</td></tr>
+<tr><td>FFN 维度</td><td>256</td><td>4,864</td><td>~49,152</td></tr>
+<tr><td>词表</td><td>54</td><td>151,936</td><td>~100,000</td></tr>
+<tr><td>训练数据</td><td>133 字</td><td>万亿 token</td><td>更多</td></tr>
+</table>
+<div style="margin-top:12px">
+  <p style="font-size:12px;color:#94a3b8;margin-bottom:6px">参数量可视化（对数尺度）</p>
+  <div style="display:flex;align-items:center;gap:6px;margin:4px 0"><span style="font-size:11px;color:#94a3b8;width:90px">Demo</span><div class="compare-bar" style="width:30px;background:#60a5fa"></div><span style="font-size:11px;color:#64748b">0.21M</span></div>
+  <div style="display:flex;align-items:center;gap:6px;margin:4px 0"><span style="font-size:11px;color:#94a3b8;width:90px">Qwen2.5-0.5B</span><div class="compare-bar" style="width:120px;background:#a78bfa"></div><span style="font-size:11px;color:#64748b">500M (×2,380)</span></div>
+  <div style="display:flex;align-items:center;gap:6px;margin:4px 0"><span style="font-size:11px;color:#94a3b8;width:90px">GPT-4</span><div class="compare-bar" style="width:400px;background:#fb923c"></div><span style="font-size:11px;color:#64748b">1,800,000M (×857万)</span></div>
+</div>
+<p style="font-size:13px;color:#4ade80;font-weight:bold;margin-top:12px;text-align:center">结构完全一样，只是规模不同。理解了 demo，就理解了所有大模型的骨架。</p>
+</div>
+
+<!-- ==================== 完整代码结构 ==================== -->
+<h2>代码结构速查</h2>
+<div class="card">
+<table>
+<tr><th>组件</th><th>类/函数</th><th>核心操作</th><th>参数量</th></tr>
+<tr><td><span class="tag tag-green">Embedding</span></td><td><code>nn.Embedding</code></td><td>查表：ID → 向量</td><td>54 × 64 = 3,456</td></tr>
+<tr><td><span class="tag tag-purple">位置编码</span></td><td><code>PositionalEncoding</code></td><td>sin/cos 固定编码</td><td>0（不可训练）</td></tr>
+<tr><td><span class="tag tag-blue">Attention</span></td><td><code>MultiHeadAttention</code></td><td>Q·K→权重→加权V</td><td>4 × 64² = 16,384</td></tr>
+<tr><td><span class="tag tag-yellow">FFN</span></td><td><code>FeedForward</code></td><td>升维→ReLU→降维</td><td>64×256 + 256×64 = 32,768</td></tr>
+<tr><td><span class="tag tag-red">Block</span></td><td><code>TransformerBlock</code></td><td>Attn + FFN + 残差</td><td>~49,280/层</td></tr>
+<tr><td></td><td><code>TransformerLM</code></td><td>4 个 Block 堆叠</td><td><strong>207,030 总计</strong></td></tr>
+</table>
+</div>
+
+<div style="text-align:center;padding:30px 0;color:#475569;font-size:12px">
+  transformer_demo.py · 0.21M 参数 · 纯 PyTorch 实现<br>
+  配合 <code>python3 01-基础概念/transformer_demo.py</code> 运行
+</div>
+
+</div>
+</body>
+</html>
