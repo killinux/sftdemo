@@ -11,7 +11,7 @@ model = model.to(device)
 tokenizer = AutoTokenizer.from_pretrained(train_model, padding_side="right")
 tokenizer.add_special_tokens({"pad_token": "[PAD]"})
 
-with open("data.json", "r") as f:
+with open("../02-数据工程/data.json", "r") as f:
     data = json.load(f)
 
 

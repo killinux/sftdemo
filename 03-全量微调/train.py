@@ -25,7 +25,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_dir, padding_side="right")
 tokenizer.add_special_tokens({"pad_token": "[PAD]"})
 
 # ── 加载数据集 ────────────────────────────────────────────────
-with open("data.json", "r") as f:
+with open("../02-数据工程/data.json", "r") as f:
     data = json.load(f)
 
 print(f"训练样本数: {len(data)}")

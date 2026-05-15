@@ -1,4 +1,5 @@
 sft_output/
+lora_output/
 __pycache__/
 *.pyc
 .DS_Store
